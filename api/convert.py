@@ -9,7 +9,6 @@ from urllib.parse import urlparse, unquote
 PORT = 10000
 HOST = "0.0.0.0"
 
-
 class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
@@ -45,7 +44,6 @@ class handler(BaseHTTPRequestHandler):
             if "share.google" in parsed_url.netloc:
                 print("Google Share detected — extracting real image...")
                 image_url = self.get_google_share_image_url(image_url)
-
                 if not image_url:
                     self.send_json(400, {"error": "Google Share extract failed"})
                     return
@@ -54,7 +52,6 @@ class handler(BaseHTTPRequestHandler):
             if "pinterest.com" in parsed_url.netloc or "pin.it" in parsed_url.netloc:
                 print("Pinterest detected — extracting real image...")
                 image_url = self.get_pinterest_image_url(image_url)
-
                 if not image_url:
                     self.send_json(400, {"error": "Pinterest extract failed"})
                     return
@@ -119,8 +116,9 @@ class handler(BaseHTTPRequestHandler):
     def get_google_share_image_url(self, share_url):
         try:
             url = share_url
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             while True:
-                response = requests.get(url, allow_redirects=False)
+                response = requests.get(url, headers=headers, allow_redirects=False)
                 redirect_url = response.headers.get("Location")
                 if not redirect_url:
                     break
@@ -151,7 +149,6 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             print("PINTEREST ERROR:", e)
             return None
-
 
 if __name__ == "__main__":
     print("Starting server...")
