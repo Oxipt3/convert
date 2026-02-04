@@ -4,7 +4,7 @@ import requests
 from PIL import Image
 import io
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 PORT = 10000
 HOST = "0.0.0.0"
@@ -44,12 +44,20 @@ class handler(BaseHTTPRequestHandler):
 
             parsed_url = urlparse(image_url)
 
+            # Pinterest support
             if "pinterest.com" in parsed_url.netloc or "pin.it" in parsed_url.netloc:
                 print("Pinterest detected — extracting real image...")
                 image_url = self.get_pinterest_image_url(image_url)
-
                 if not image_url:
                     self.send_json(400, {"error": "Pinterest extract failed"})
+                    return
+
+            # Google Share support
+            if "share.google" in parsed_url.netloc:
+                print("Google Share detected — extracting real image...")
+                image_url = self.get_google_share_image_url(image_url)
+                if not image_url:
+                    self.send_json(400, {"error": "Google Share extract failed"})
                     return
 
             headers = {
@@ -123,28 +131,44 @@ class handler(BaseHTTPRequestHandler):
     def get_pinterest_image_url(self, pinterest_url):
         try:
             api_url = "https://pintools.app/get-video"
-
-            payload = {
-                "url": pinterest_url
-            }
-
-            headers = {
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0"
-            }
+            payload = {"url": pinterest_url}
+            headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
 
             response = requests.post(api_url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
 
             data = response.json()
-
             if data.get("contentType") == "image" and "videoUrl" in data:
                 return data["videoUrl"]
-
             return None
 
         except Exception as e:
             print("PINTEREST ERROR:", e)
+            return None
+
+    def get_google_share_image_url(self, url):
+        """Extracts direct image URL from share.google links"""
+        try:
+            while True:
+                response = requests.get(url, allow_redirects=False, timeout=30)
+                redirect_url = response.headers.get("Location")
+                if not redirect_url:
+                    break
+
+                if "?imgurl=" in redirect_url or "&imgurl=" in redirect_url:
+                    if "?imgurl=" in redirect_url:
+                        img_part = redirect_url.split("?imgurl=")[1].split("&")[0]
+                    else:
+                        img_part = redirect_url.split("&imgurl=")[1].split("&")[0]
+                    img_url = unquote(img_part)
+                    return img_url
+
+                url = redirect_url
+
+            return None
+
+        except Exception as e:
+            print("GOOGLE SHARE ERROR:", e)
             return None
 
 
@@ -154,7 +178,5 @@ if __name__ == "__main__":
     print("Starting server...")
 
     server = ThreadingHTTPServer((HOST, PORT), handler)
-
     print(f"Server running on http://{HOST}:{PORT}")
-
     server.serve_forever()
